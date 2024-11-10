@@ -32,54 +32,62 @@ func (m *Map) getChars(rw http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(rw).Encode(chars)
 }
 
-func (m *Map) getMarkers(rw http.ResponseWriter, req *http.Request) {
-	s := m.getSession(req)
-	if s == nil || !s.Auths.Has(AUTH_MAP) {
-		rw.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-	if !s.Auths.Has(AUTH_MARKERS) {
-		json.NewEncoder(rw).Encode([]interface{}{})
-		return
-	}
-	markers := []FrontendMarker{}
-	m.db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte("markers"))
-		if b == nil {
-			return nil
-		}
-		grid := b.Bucket([]byte("grid"))
-		if grid == nil {
-			return nil
-		}
-		grids := tx.Bucket([]byte("grids"))
-		if grids == nil {
-			return nil
-		}
-		return grid.ForEach(func(k, v []byte) error {
-			m := Marker{}
-			json.Unmarshal(v, &m)
-			graw := grids.Get([]byte(m.GridID))
-			if graw == nil {
-				return nil
-			}
-			g := GridData{}
-			json.Unmarshal(graw, &g)
-			markers = append(markers, FrontendMarker{
-				Image:  m.Image,
-				Hidden: m.Hidden,
-				ID:     m.ID,
-				Name:   m.Name,
-				Map:    g.Map,
-				Position: Position{
-					X: m.Position.X + g.Coord.X*100,
-					Y: m.Position.Y + g.Coord.Y*100,
-				},
-			})
-			return nil
-		})
-	})
-	json.NewEncoder(rw).Encode(markers)
+func (m Map) getMarkers(rw http.ResponseWriter, reqhttp.Request) {
+    s := m.getSession(req)
+    if s == nil || !s.Auths.Has(AUTH_MAP) {
+        rw.WriteHeader(http.StatusUnauthorized)
+        return
+    }
+    if !s.Auths.Has(AUTH_MARKERS) {
+        json.NewEncoder(rw).Encode([]interface{}{})
+        return
+    }
+    markers := []FrontendMarker{}
+
+    namesToIgnore := map[string]bool{
+            "Burrow": true,
+    }
+
+    m.db.View(func(tx bbolt.Tx) error {
+        b := tx.Bucket([]byte("markers"))
+        if b == nil {
+            return nil
+        }
+        grid := b.Bucket([]byte("grid"))
+        if grid == nil {
+            return nil
+        }
+        grids := tx.Bucket([]byte("grids"))
+        if grids == nil {
+            return nil
+        }
+        return grid.ForEach(func(k, v []byte) error {
+            m := Marker{}
+            json.Unmarshal(v, &m)
+            graw := grids.Get([]byte(m.GridID))
+            if graw == nil {
+                return nil
+            }
+            g := GridData{}
+            json.Unmarshal(graw, &g)
+            if namesToIgnore[m.Name] {
+               return nil
+            }
+            markers = append(markers, FrontendMarker{
+                Image:  m.Image,
+                Hidden: m.Hidden,
+                ID:     m.ID,
+                Name:   m.Name,
+                Map:    g.Map,
+                Position: Position{
+                    X: m.Position.X + g.Coord.X100,
+                    Y: m.Position.Y + g.Coord.Y*100,
+                },
+            })
+            return nil
+        })
+    })
+    json.NewEncoder(rw).Encode(markers)
 }
 
 func (m *Map) getMaps(rw http.ResponseWriter, req *http.Request) {
